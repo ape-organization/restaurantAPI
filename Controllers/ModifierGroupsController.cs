@@ -7,83 +7,86 @@ namespace PharmacyAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class HeelSizesController : ControllerBase
+    public class ModifierGroupsController : ControllerBase
     {
-        private readonly IHeelSizeService _heelSizeService;
+        private readonly IModifierGroupService _modifierGroupService;
 
-        public HeelSizesController(IHeelSizeService heelSizeService)
+        public ModifierGroupsController(
+            IModifierGroupService modifierGroupService)
         {
-            _heelSizeService = heelSizeService;
+            _modifierGroupService = modifierGroupService;
         }
 
 
         // ============================================================
-        // GET: api/heelsizes
+        // GET: api/modifiergroups
         // ============================================================
 
         [HttpGet]
         [AllowAnonymous]
-        public async Task<ActionResult<List<HeelSizeDto>>> GetHeelSizes(
-            CancellationToken cancellationToken)
-        {
-            try { 
-            var heelSizes = await _heelSizeService
-                .GetHeelSizes(cancellationToken);
-
-            return Ok(heelSizes);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
-        }
-
-
-        // ============================================================
-        // GET: api/heelsizes/5
-        // ============================================================
-
-        [HttpGet("{id:int}")]
-        [AllowAnonymous]
-        public async Task<ActionResult<HeelSizeDto>> GetHeelSize(
-            int id,
-            CancellationToken cancellationToken)
-        {
-            try { 
-            var heelSize = await _heelSizeService
-                .GetHeelSize(id, cancellationToken);
-
-            if (heelSize == null)
-                return NotFound();
-
-            return Ok(heelSize);
-            }
-            catch (Exception e)
-            {
-                return BadRequest(e.Message);
-            }
-        }
-
-
-        // ============================================================
-        // POST: api/heelsizes
-        // ============================================================
-
-        [HttpPost]
-        [Authorize(Roles = "Admin")]
-        public async Task<ActionResult<HeelSizeDto>> CreateHeelSize(
-            [FromBody] HeelSizeDto dto,
+        public async Task<ActionResult<List<ModifierGroupDto>>> GetModifierGroups(
             CancellationToken cancellationToken)
         {
             try
             {
-                var heelSize = await _heelSizeService
-                    .CreateHeelSize(dto, cancellationToken);
+                var groups = await _modifierGroupService
+                    .GetModifierGroups(cancellationToken);
+
+                return Ok(groups);
+            }
+            catch (Exception e)
+            {
+                return BadRequest(e.Message);
+            }
+        }
+
+
+        // ============================================================
+        // GET: api/modifiergroups/5
+        // ============================================================
+
+        [HttpGet("{id:int}")]
+        [AllowAnonymous]
+        public async Task<ActionResult<ModifierGroupDto>> GetModifierGroup(
+            int id,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                var group = await _modifierGroupService
+                    .GetModifierGroup(id, cancellationToken);
+
+                if (group == null)
+                    return NotFound();
+
+                return Ok(group);
+            }
+            catch (Exception e)
+            {
+                return BadRequest(e.Message);
+            }
+        }
+
+
+        // ============================================================
+        // POST: api/modifiergroups
+        // ============================================================
+
+        [HttpPost]
+        [Authorize(Roles = "Admin")]
+        public async Task<ActionResult<ModifierGroupDto>> CreateModifierGroup(
+            [FromBody] ModifierGroupDto dto,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                var group = await _modifierGroupService
+                    .CreateModifierGroup(dto, cancellationToken);
 
                 return CreatedAtAction(
-                    nameof(GetHeelSize),
-                    new { id = heelSize!.Id },
-                    heelSize);
+                    nameof(GetModifierGroup),
+                    new { id = group.Id },
+                    group);
             }
             catch (ArgumentException ex)
             {
@@ -92,31 +95,24 @@ namespace PharmacyAPI.Controllers
                     message = ex.Message
                 });
             }
-            catch (InvalidOperationException ex)
-            {
-                return Conflict(new
-                {
-                    message = ex.Message
-                });
-            }
         }
 
 
         // ============================================================
-        // PUT: api/heelsizes/5
+        // PUT: api/modifiergroups/5
         // ============================================================
 
         [HttpPut("{id:int}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> UpdateHeelSize(
+        public async Task<IActionResult> UpdateModifierGroup(
             int id,
-            [FromBody] HeelSizeDto dto,
+            [FromBody] ModifierGroupDto dto,
             CancellationToken cancellationToken)
         {
             try
             {
-                var updated = await _heelSizeService
-                    .UpdateHeelSize(
+                var updated = await _modifierGroupService
+                    .UpdateModifierGroup(
                         id,
                         dto,
                         cancellationToken);
@@ -133,45 +129,28 @@ namespace PharmacyAPI.Controllers
                     message = ex.Message
                 });
             }
-            catch (InvalidOperationException ex)
-            {
-                return Conflict(new
-                {
-                    message = ex.Message
-                });
-            }
         }
 
 
         // ============================================================
-        // DELETE: api/heelsizes/5
+        // DELETE: api/modifiergroups/5
         // ============================================================
 
         [HttpDelete("{id:int}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> DeleteHeelSize(
+        public async Task<IActionResult> DeleteModifierGroup(
             int id,
             CancellationToken cancellationToken)
         {
-            try
-            {
-                var deleted = await _heelSizeService
-                    .DeleteHeelSize(
-                        id,
-                        cancellationToken);
+            var deleted = await _modifierGroupService
+                .DeleteModifierGroup(
+                    id,
+                    cancellationToken);
 
-                if (!deleted)
-                    return NotFound();
+            if (!deleted)
+                return NotFound();
 
-                return NoContent();
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Conflict(new
-                {
-                    message = ex.Message
-                });
-            }
+            return NoContent();
         }
     }
 }

@@ -4,8 +4,9 @@
     {
         Pending,
         Confirmed,
-        Processing,
-        Shipped,
+        Preparing,
+        Ready,
+        OutForDelivery,
         Delivered,
         Cancelled
     }

@@ -97,6 +97,31 @@ namespace PharmacyAPI.Controllers
             }
         }
 
+        // =====================================================
+        // FULL MENU
+        // GET: api/products/menu
+        //
+        // Categories with their products, for the menu page.
+        // =====================================================
+
+        [HttpGet("menu")]
+        [AllowAnonymous]
+        public async Task<ActionResult<List<MenuCategoryDto>>> GetMenu(
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var menu =
+                    await _productService.GetMenu(cancellationToken);
+
+                return Ok(menu);
+            }
+            catch (Exception e)
+            {
+                return BadRequest(e.Message);
+            }
+        }
+
         [HttpGet("admin")]
         [Authorize]
         public async Task<ActionResult<PagedResponse<ProductResponseDto>>> AdminGetProducts(
@@ -305,6 +330,13 @@ namespace PharmacyAPI.Controllers
                     message = ex.Message
                 });
             }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new
+                {
+                    message = ex.Message
+                });
+            }
             catch (KeyNotFoundException ex)
             {
                 return NotFound(new
@@ -351,6 +383,13 @@ namespace PharmacyAPI.Controllers
             catch (InvalidOperationException ex)
             {
                 return Conflict(new
+                {
+                    message = ex.Message
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new
                 {
                     message = ex.Message
                 });

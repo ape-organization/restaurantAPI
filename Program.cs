@@ -55,7 +55,7 @@ builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<ISliderService, SliderService>();
 builder.Services.AddScoped<IClientService, ClientService>();
 builder.Services.AddScoped<ISizeService, SizeService>();
-builder.Services.AddScoped<IHeelSizeService, HeelSizeService>();
+builder.Services.AddScoped<IModifierGroupService, ModifierGroupService>();
 builder.Services.AddHttpClient<IEmailService, EmailService>();
 
 // Background email queue (one instance for the queue and the hosted service)

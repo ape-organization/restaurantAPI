@@ -19,9 +19,11 @@
         // Used when the product has no variants
         public int StockQuantity { get; set; }
 
-        public bool IsInStock { get; set; }
+        public bool IsAvailable { get; set; }
 
         public bool HasVariants { get; set; }
+
+        public bool HasModifiers { get; set; }
 
         public decimal DiscountPercentage { get; set; }
 
@@ -43,10 +45,17 @@
             = new();
 
         // =========================
-        // VARIANTS
+        // VARIANTS (SIZES)
         // =========================
 
         public List<ProductVariantResponseDto> Variants { get; set; }
+            = new();
+
+        // =========================
+        // MODIFIER GROUPS
+        // =========================
+
+        public List<ProductModifierGroupResponseDto> ModifierGroups { get; set; }
             = new();
     }
 
@@ -79,11 +88,48 @@
 
         public string? SizeName { get; set; }
 
-        public bool? IsInStock { get; set; }
-        public int? HeelSizeId { get; set; }
+        public decimal Price { get; set; }
 
-        public string? HeelSizeName { get; set; }
+        // Price after the product discount
+        public decimal DiscountedPrice { get; set; }
+
+        public bool IsAvailable { get; set; }
 
         public int StockQuantity { get; set; }
+    }
+
+
+    public class ProductModifierGroupResponseDto
+    {
+        public int ModifierGroupId { get; set; }
+
+        public string NameEn { get; set; } = string.Empty;
+
+        public string NameAr { get; set; } = string.Empty;
+
+        public bool IsRequired { get; set; }
+
+        public int MinSelections { get; set; }
+
+        public int MaxSelections { get; set; }
+
+        public List<ModifierOptionResponseDto> Options { get; set; }
+            = new();
+    }
+
+
+    public class ModifierOptionResponseDto
+    {
+        public int Id { get; set; }
+
+        public string NameEn { get; set; } = string.Empty;
+
+        public string NameAr { get; set; } = string.Empty;
+
+        public decimal Price { get; set; }
+
+        public bool IsAvailable { get; set; }
+
+        public int? ExtraProductId { get; set; }
     }
 }

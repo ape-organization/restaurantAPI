@@ -309,6 +309,14 @@ namespace PharmacyAPI.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("DescriptionAr")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("DescriptionEn")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
                     b.Property<string>("ImageUrl")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
@@ -377,7 +385,7 @@ namespace PharmacyAPI.Migrations
                     b.ToTable("Clients");
                 });
 
-            modelBuilder.Entity("PharmacyAPI.Models.HeelSize", b =>
+            modelBuilder.Entity("PharmacyAPI.Models.ModifierGroup", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -388,18 +396,62 @@ namespace PharmacyAPI.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
-                    b.Property<string>("Name")
+                    b.Property<string>("NameAr")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("NameEn")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Name")
-                        .IsUnique()
-                        .HasFilter("[IsActive] = 1");
+                    b.ToTable("ModifierGroups");
+                });
 
-                    b.ToTable("HeelSizes");
+            modelBuilder.Entity("PharmacyAPI.Models.ModifierOption", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("ExtraProductId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsAvailable")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("ModifierGroupId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("NameAr")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("NameEn")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExtraProductId");
+
+                    b.HasIndex("ModifierGroupId");
+
+                    b.ToTable("ModifierOptions");
                 });
 
             modelBuilder.Entity("PharmacyAPI.Models.Order", b =>
@@ -481,6 +533,46 @@ namespace PharmacyAPI.Migrations
                     b.ToTable("OrderItems");
                 });
 
+            modelBuilder.Entity("PharmacyAPI.Models.OrderItemModifier", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("ModifierOptionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("NameAr")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("NameEn")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("OrderItemId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModifierOptionId");
+
+                    b.HasIndex("OrderItemId");
+
+                    b.ToTable("OrderItemModifiers");
+                });
+
             modelBuilder.Entity("PharmacyAPI.Models.Product", b =>
                 {
                     b.Property<int>("Id")
@@ -511,10 +603,10 @@ namespace PharmacyAPI.Migrations
                         .HasPrecision(5, 2)
                         .HasColumnType("decimal(5,2)");
 
-                    b.Property<bool>("IsDeleted")
+                    b.Property<bool>("IsAvailable")
                         .HasColumnType("bit");
 
-                    b.Property<bool>("IsInStock")
+                    b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
                     b.Property<string>("NameAr")
@@ -575,6 +667,39 @@ namespace PharmacyAPI.Migrations
                     b.ToTable("ProductImages");
                 });
 
+            modelBuilder.Entity("PharmacyAPI.Models.ProductModifierGroup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("MaxSelections")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MinSelections")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ModifierGroupId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModifierGroupId");
+
+                    b.HasIndex("ProductId", "ModifierGroupId")
+                        .IsUnique();
+
+                    b.ToTable("ProductModifierGroups");
+                });
+
             modelBuilder.Entity("PharmacyAPI.Models.ProductVariant", b =>
                 {
                     b.Property<int>("Id")
@@ -583,14 +708,15 @@ namespace PharmacyAPI.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int?>("HeelSizeId")
-                        .HasColumnType("int");
-
                     b.Property<bool>("InStock")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
@@ -603,13 +729,11 @@ namespace PharmacyAPI.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("HeelSizeId");
-
                     b.HasIndex("SizeId");
 
                     b.HasIndex("ProductId", "IsActive");
 
-                    b.HasIndex("ProductId", "SizeId", "HeelSizeId");
+                    b.HasIndex("ProductId", "SizeId");
 
                     b.ToTable("ProductVariants");
                 });
@@ -751,6 +875,24 @@ namespace PharmacyAPI.Migrations
                     b.Navigation("Cart");
                 });
 
+            modelBuilder.Entity("PharmacyAPI.Models.ModifierOption", b =>
+                {
+                    b.HasOne("PharmacyAPI.Models.Product", "ExtraProduct")
+                        .WithMany()
+                        .HasForeignKey("ExtraProductId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PharmacyAPI.Models.ModifierGroup", "ModifierGroup")
+                        .WithMany("Options")
+                        .HasForeignKey("ModifierGroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExtraProduct");
+
+                    b.Navigation("ModifierGroup");
+                });
+
             modelBuilder.Entity("PharmacyAPI.Models.Order", b =>
                 {
                     b.HasOne("PharmacyAPI.Models.Authentication.ApplicationUser", null)
@@ -792,6 +934,24 @@ namespace PharmacyAPI.Migrations
                     b.Navigation("ProductVariant");
                 });
 
+            modelBuilder.Entity("PharmacyAPI.Models.OrderItemModifier", b =>
+                {
+                    b.HasOne("PharmacyAPI.Models.ModifierOption", "ModifierOption")
+                        .WithMany()
+                        .HasForeignKey("ModifierOptionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("PharmacyAPI.Models.OrderItem", "OrderItem")
+                        .WithMany("Modifiers")
+                        .HasForeignKey("OrderItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ModifierOption");
+
+                    b.Navigation("OrderItem");
+                });
+
             modelBuilder.Entity("PharmacyAPI.Models.Product", b =>
                 {
                     b.HasOne("PharmacyAPI.Models.Category", "Category")
@@ -814,13 +974,27 @@ namespace PharmacyAPI.Migrations
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("PharmacyAPI.Models.ProductModifierGroup", b =>
+                {
+                    b.HasOne("PharmacyAPI.Models.ModifierGroup", "ModifierGroup")
+                        .WithMany("ProductModifierGroups")
+                        .HasForeignKey("ModifierGroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PharmacyAPI.Models.Product", "Product")
+                        .WithMany("ProductModifierGroups")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ModifierGroup");
+
+                    b.Navigation("Product");
+                });
+
             modelBuilder.Entity("PharmacyAPI.Models.ProductVariant", b =>
                 {
-                    b.HasOne("PharmacyAPI.Models.HeelSize", "HeelSize")
-                        .WithMany("ProductVariants")
-                        .HasForeignKey("HeelSizeId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("PharmacyAPI.Models.Product", "Product")
                         .WithMany("Variants")
                         .HasForeignKey("ProductId")
@@ -831,8 +1005,6 @@ namespace PharmacyAPI.Migrations
                         .WithMany("ProductVariants")
                         .HasForeignKey("SizeId")
                         .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("HeelSize");
 
                     b.Navigation("Product");
 
@@ -859,9 +1031,11 @@ namespace PharmacyAPI.Migrations
                     b.Navigation("Orders");
                 });
 
-            modelBuilder.Entity("PharmacyAPI.Models.HeelSize", b =>
+            modelBuilder.Entity("PharmacyAPI.Models.ModifierGroup", b =>
                 {
-                    b.Navigation("ProductVariants");
+                    b.Navigation("Options");
+
+                    b.Navigation("ProductModifierGroups");
                 });
 
             modelBuilder.Entity("PharmacyAPI.Models.Order", b =>
@@ -869,11 +1043,18 @@ namespace PharmacyAPI.Migrations
                     b.Navigation("Items");
                 });
 
+            modelBuilder.Entity("PharmacyAPI.Models.OrderItem", b =>
+                {
+                    b.Navigation("Modifiers");
+                });
+
             modelBuilder.Entity("PharmacyAPI.Models.Product", b =>
                 {
                     b.Navigation("Images");
 
                     b.Navigation("OrderItems");
+
+                    b.Navigation("ProductModifierGroups");
 
                     b.Navigation("Variants");
                 });

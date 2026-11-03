@@ -19,7 +19,7 @@
         public decimal DiscountPercentage { get; set; }
         public bool hasVariants { get; set; }
 
-        public bool IsInStock { get; set; }
+        public bool IsAvailable { get; set; }
 
         public List<string> Images { get; set; }
             = new();

@@ -10,6 +10,7 @@
 
         public string? DescriptionAr { get; set; }
 
+        // Base price, used when the product has no sizes
         public decimal Price { get; set; }
 
         public decimal ActualPrice { get; set; }
@@ -17,7 +18,7 @@
         // Used when the product has no variants
         public int StockQuantity { get; set; }
 
-        public bool IsInStock { get; set; } = true;
+        public bool IsAvailable { get; set; } = true;
 
         public decimal DiscountPercentage { get; set; } = 0;
 
@@ -35,10 +36,19 @@
             = new();
 
         // =========================
-        // VARIANTS
+        // VARIANTS (SIZES)
         // =========================
 
         public List<ProductVariantDto> Variants { get; set; }
+            = new();
+
+        // =========================
+        // MODIFIER GROUPS
+        // =========================
+        //
+        // The sent list replaces the product's current groups.
+        //
+        public List<ProductModifierGroupDto> ModifierGroups { get; set; }
             = new();
     }
 }

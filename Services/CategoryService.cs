@@ -85,6 +85,8 @@ public sealed class CategoryService : ICategoryService
         {
             NameEn = nameEn,
             NameAr = nameAr,
+            DescriptionEn = NormalizeDescription(dto.DescriptionEn),
+            DescriptionAr = NormalizeDescription(dto.DescriptionAr),
             IsDeleted = false
         };
 
@@ -154,6 +156,8 @@ public sealed class CategoryService : ICategoryService
 
         category.NameEn = nameEn;
         category.NameAr = nameAr;
+        category.DescriptionEn = NormalizeDescription(dto.DescriptionEn);
+        category.DescriptionAr = NormalizeDescription(dto.DescriptionAr);
 
         string? oldImageUrl = null;
         string? newImageUrl = null;
@@ -231,5 +235,12 @@ public sealed class CategoryService : ICategoryService
         // Delete the physical file only after the DB operation succeeds.
         if (!string.IsNullOrWhiteSpace(categoryImageUrl))
             await _imageService.DeleteImageAsync(categoryImageUrl, "categories");
+    }
+
+    private static string? NormalizeDescription(string? description)
+    {
+        return string.IsNullOrWhiteSpace(description)
+            ? null
+            : description.Trim();
     }
 }

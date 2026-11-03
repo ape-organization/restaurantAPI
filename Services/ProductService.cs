@@ -68,6 +68,9 @@ public interface IProductService
         int? categoryId = null,
         bool? offers = null,
         CancellationToken cancellationToken = default);
+
+    Task<List<MenuCategoryDto>> GetMenu(
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class ProductService : IProductService
@@ -134,8 +137,8 @@ public sealed class ProductService : IProductService
                 StockQuantity =
                     ProductDefaultStock,
 
-                IsInStock =
-                    p.IsInStock,
+                IsAvailable =
+                    p.IsAvailable,
 
                 DiscountPercentage =
                     p.DiscountPercentage,
@@ -160,11 +163,15 @@ public sealed class ProductService : IProductService
                         v.IsActive &&
                         (!v.SizeId.HasValue ||
                          (v.Size != null &&
-                          v.Size.IsActive)) &&
-                        (!v.HeelSizeId.HasValue ||
-                         (v.HeelSize != null &&
-                          v.HeelSize.IsActive))
+                          v.Size.IsActive))
                     ),
+
+                // Lets the menu know the customer must pick
+                // extras / sauces before adding to the cart.
+                HasModifiers =
+                    p.ProductModifierGroups.Any(pg =>
+                        pg.ModifierGroup.IsActive &&
+                        pg.ModifierGroup.Options.Any(o => o.IsActive)),
 
                 Images =
                     p.Images
@@ -239,6 +246,59 @@ public sealed class ProductService : IProductService
     }
 
     // ============================================================
+    // FULL MENU
+    // ============================================================
+    //
+    // All categories with their products, in two SQL queries.
+    // Unavailable products are included so the menu can show
+    // them as "sold out".
+    //
+    public async Task<List<MenuCategoryDto>> GetMenu(
+        CancellationToken cancellationToken = default)
+    {
+        var categories =
+            await _context.Categories
+                .AsNoTracking()
+                .Where(c => !c.IsDeleted)
+                .OrderBy(c => c.Id)
+                .Select(c => new MenuCategoryDto
+                {
+                    Id = c.Id,
+                    NameAr = c.NameAr,
+                    NameEn = c.NameEn,
+                    DescriptionAr = c.DescriptionAr,
+                    DescriptionEn = c.DescriptionEn,
+                    ImageUrl = c.ImageUrl
+                })
+                .ToListAsync(cancellationToken);
+
+        if (categories.Count == 0)
+            return categories;
+
+        var products =
+            await _context.Products
+                .AsNoTracking()
+                .Where(p =>
+                    !p.IsDeleted &&
+                    !p.Category.IsDeleted)
+                .OrderBy(p => p.CreatedAt)
+                .ThenBy(p => p.Id)
+                .Select(ProductListProjection)
+                .ToListAsync(cancellationToken);
+
+        var productsByCategory =
+            products.ToLookup(p => p.CategoryId);
+
+        foreach (var category in categories)
+        {
+            category.Products =
+                productsByCategory[category.Id].ToList();
+        }
+
+        return categories;
+    }
+
+    // ============================================================
     // ADMIN GET PRODUCTS
     // ============================================================
 
@@ -290,9 +350,10 @@ public sealed class ProductService : IProductService
                     .Where(v => v.IsActive))
                     .ThenInclude(v => v.Size)
 
-                .Include(p => p.Variants
-                    .Where(v => v.IsActive))
-                    .ThenInclude(v => v.HeelSize)
+                .Include(p => p.ProductModifierGroups)
+                    .ThenInclude(pg => pg.ModifierGroup)
+                    .ThenInclude(g => g.Options
+                        .Where(o => o.IsActive))
 
                 .AsSplitQuery()
 
@@ -346,8 +407,10 @@ public sealed class ProductService : IProductService
                 .Include(p => p.Variants)
                     .ThenInclude(v => v.Size)
 
-                .Include(p => p.Variants)
-                    .ThenInclude(v => v.HeelSize)
+                .Include(p => p.ProductModifierGroups)
+                    .ThenInclude(pg => pg.ModifierGroup)
+                    .ThenInclude(g => g.Options
+                        .Where(o => o.IsActive))
 
                 .AsSplitQuery()
 
@@ -441,9 +504,10 @@ public sealed class ProductService : IProductService
                     .Where(v => v.IsActive))
                     .ThenInclude(v => v.Size)
 
-                .Include(p => p.Variants
-                    .Where(v => v.IsActive))
-                    .ThenInclude(v => v.HeelSize)
+                .Include(p => p.ProductModifierGroups)
+                    .ThenInclude(pg => pg.ModifierGroup)
+                    .ThenInclude(g => g.Options
+                        .Where(o => o.IsActive))
 
                 .AsSplitQuery()
 
@@ -594,7 +658,7 @@ public sealed class ProductService : IProductService
 
                     !oi.Product.IsDeleted &&
 
-                    oi.Product.IsInStock)
+                    oi.Product.IsAvailable)
 
                 .Select(oi => new
                 {
@@ -644,7 +708,7 @@ public sealed class ProductService : IProductService
 
                     !p.IsDeleted &&
 
-                    p.IsInStock)
+                    p.IsAvailable)
 
                 .Select(p => new BestSellerProductDto
                 {
@@ -668,16 +732,13 @@ public sealed class ProductService : IProductService
                             v.IsActive &&
                             (!v.SizeId.HasValue ||
                              (v.Size != null &&
-                              v.Size.IsActive)) &&
-                            (!v.HeelSizeId.HasValue ||
-                             (v.HeelSize != null &&
-                              v.HeelSize.IsActive))),
+                              v.Size.IsActive))),
 
                     StockQuantity =
                         ProductDefaultStock,
 
-                    IsInStock =
-                        p.IsInStock,
+                    IsAvailable =
+                        p.IsAvailable,
 
                     DiscountPercentage =
                         p.DiscountPercentage,
@@ -770,9 +831,12 @@ public sealed class ProductService : IProductService
             dto.CategoryId,
             cancellationToken);
 
-        // One DB round-trip for all size + heel-size validation.
         await ValidateVariants(
             dto.Variants,
+            cancellationToken);
+
+        await ValidateModifierGroups(
+            dto.ModifierGroups,
             cancellationToken);
 
         var product = new Product
@@ -785,7 +849,7 @@ public sealed class ProductService : IProductService
             ActualPrice = 0,
             StockQuantity = ProductDefaultStock,
             DiscountPercentage = dto.DiscountPercentage,
-            IsInStock = dto.IsInStock,
+            IsAvailable = dto.IsAvailable,
             CategoryId = dto.CategoryId,
             IsDeleted = false,
             CreatedAt = DateTime.UtcNow
@@ -830,12 +894,27 @@ public sealed class ProductService : IProductService
                     product.Variants.Add(new ProductVariant
                     {
                         SizeId = variantDto.SizeId,
-                        HeelSizeId = variantDto.HeelSizeId,
+                        Price = variantDto.Price,
                         StockQuantity = VariantDefaultStock,
                         IsActive = true,
-                        InStock = variantDto.IsInStock
+                        InStock = variantDto.IsAvailable
                     });
                 }
+            }
+
+            // --------------------------------------------------------
+            // MODIFIER GROUPS
+            // --------------------------------------------------------
+
+            foreach (var groupDto in dto.ModifierGroups)
+            {
+                product.ProductModifierGroups.Add(new ProductModifierGroup
+                {
+                    ModifierGroupId = groupDto.ModifierGroupId,
+                    IsRequired = groupDto.IsRequired,
+                    MinSelections = groupDto.MinSelections,
+                    MaxSelections = groupDto.MaxSelections
+                });
             }
 
             // --------------------------------------------------------
@@ -852,7 +931,7 @@ public sealed class ProductService : IProductService
 
             dto.Id = product.Id;
             dto.StockQuantity = ProductDefaultStock;
-            dto.IsInStock = product.IsInStock;
+            dto.IsAvailable = product.IsAvailable;
 
             dto.Images = product.Images
                 .OrderBy(i => i.SortOrder)
@@ -902,14 +981,18 @@ public sealed class ProductService : IProductService
             dto.CategoryId,
             cancellationToken);
 
-        // One DB round-trip for all size + heel-size validation.
         await ValidateVariants(
             dto.Variants,
+            cancellationToken);
+
+        await ValidateModifierGroups(
+            dto.ModifierGroups,
             cancellationToken);
 
         var product = await _context.Products
             .Include(p => p.Images)
             .Include(p => p.Variants)
+            .Include(p => p.ProductModifierGroups)
             .Where(p =>
                 p.Id == id &&
                 !p.IsDeleted)
@@ -932,7 +1015,7 @@ public sealed class ProductService : IProductService
             product.ActualPrice = 0;
             product.StockQuantity = ProductDefaultStock;
             product.DiscountPercentage = dto.DiscountPercentage;
-            product.IsInStock = dto.IsInStock;
+            product.IsAvailable = dto.IsAvailable;
             product.CategoryId = dto.CategoryId;
 
             // Images are processed whenever the request sends an image list.
@@ -953,6 +1036,8 @@ public sealed class ProductService : IProductService
             }
 
             UpdateVariants(product, dto.Variants);
+
+            UpdateModifierGroups(product, dto.ModifierGroups);
 
             await _context.SaveChangesAsync(cancellationToken);
 
@@ -1190,19 +1275,18 @@ public sealed class ProductService : IProductService
         // BUILD LOOKUP OF EXISTING VARIANTS
         // --------------------------------------------------------
         //
-        // A variant is identified by (SizeId, HeelSizeId) only.
-        // InStock is a property of the variant, not part of its identity.
+        // A variant is identified by its SizeId only.
+        // Price and InStock are properties of the variant,
+        // not part of its identity.
         //
-        // Old data may contain several rows for the same size combination
-        // (created when InStock was part of the key). Prefer the active row,
-        // then the newest one. The extra rows are deactivated below.
+        // If several rows exist for the same size, prefer the active
+        // row, then the newest one. The extra rows are deactivated below.
         //
         var existingVariants =
             product.Variants
                 .GroupBy(v =>
                     BuildVariantKey(
-                        v.SizeId,
-                        v.HeelSizeId))
+                        v.SizeId))
                 .ToDictionary(
                     g => g.Key,
                     g => g
@@ -1226,8 +1310,7 @@ public sealed class ProductService : IProductService
         {
             var key =
                 BuildVariantKey(
-                    variantDto.SizeId,
-                    variantDto.HeelSizeId);
+                    variantDto.SizeId);
 
             // ----------------------------------------------------
             // EXISTING VARIANT
@@ -1247,7 +1330,10 @@ public sealed class ProductService : IProductService
                     true;
 
                 existingVariant.InStock =
-                    variantDto.IsInStock;
+                    variantDto.IsAvailable;
+
+                existingVariant.Price =
+                    variantDto.Price;
 
                 keptVariants.Add(existingVariant);
 
@@ -1264,8 +1350,8 @@ public sealed class ProductService : IProductService
                     SizeId =
                         variantDto.SizeId,
 
-                    HeelSizeId =
-                        variantDto.HeelSizeId,
+                    Price =
+                        variantDto.Price,
 
                     StockQuantity =
                         VariantDefaultStock,
@@ -1274,7 +1360,7 @@ public sealed class ProductService : IProductService
                         true,
 
                     InStock =
-                        variantDto.IsInStock
+                        variantDto.IsAvailable
                 };
 
             product.Variants.Add(newVariant);
@@ -1295,6 +1381,53 @@ public sealed class ProductService : IProductService
                 existingVariant.IsActive =
                     false;
             }
+        }
+    }
+
+    // ============================================================
+    // UPDATE MODIFIER GROUPS
+    // ============================================================
+    //
+    // The sent list replaces the product's groups. Links are plain
+    // join rows (orders keep their own snapshot), so removed links
+    // are deleted.
+    //
+    private void UpdateModifierGroups(
+        Product product,
+        List<ProductModifierGroupDto>? groupDtos)
+    {
+        groupDtos ??= [];
+
+        var requestedById =
+            groupDtos.ToDictionary(
+                g => g.ModifierGroupId);
+
+        foreach (var existing in product.ProductModifierGroups.ToList())
+        {
+            if (!requestedById.TryGetValue(
+                    existing.ModifierGroupId,
+                    out var groupDto))
+            {
+                _context.ProductModifierGroups.Remove(existing);
+                continue;
+            }
+
+            existing.IsRequired = groupDto.IsRequired;
+            existing.MinSelections = groupDto.MinSelections;
+            existing.MaxSelections = groupDto.MaxSelections;
+
+            requestedById.Remove(existing.ModifierGroupId);
+        }
+
+        foreach (var groupDto in requestedById.Values)
+        {
+            product.ProductModifierGroups.Add(new ProductModifierGroup
+            {
+                ModifierGroupId = groupDto.ModifierGroupId,
+                IsRequired = groupDto.IsRequired,
+                MinSelections = groupDto.MinSelections,
+                MaxSelections = groupDto.MaxSelections
+            });
         }
     }
 
@@ -1494,7 +1627,7 @@ public sealed class ProductService : IProductService
     }
 
     // ============================================================
-    // VALIDATE VARIANTS
+    // VALIDATE VARIANTS (SIZES)
     // ============================================================
 
     private async Task ValidateVariants(
@@ -1504,80 +1637,99 @@ public sealed class ProductService : IProductService
         if (variants is null || variants.Count == 0)
             return;
 
-        var keys = new HashSet<(int? SizeId, int? HeelSizeId)>();
         var sizeIds = new HashSet<int>();
-        var heelSizeIds = new HashSet<int>();
 
         foreach (var variant in variants)
         {
-            if (!variant.SizeId.HasValue &&
-                !variant.HeelSizeId.HasValue)
+            if (!variant.SizeId.HasValue ||
+                variant.SizeId.Value <= 0)
             {
                 throw new ArgumentException(
-                    "Each variant must have a size or heel size.");
+                    "Each variant must have a size.");
             }
 
-            var key = BuildVariantKey(
-                variant.SizeId,
-                variant.HeelSizeId);
-
-            if (!keys.Add(key))
+            if (variant.Price < 0)
             {
                 throw new ArgumentException(
-                    "Duplicate product variant detected.");
+                    "Size price cannot be negative.");
             }
 
-            if (variant.SizeId.HasValue)
-                sizeIds.Add(variant.SizeId.Value);
-
-            if (variant.HeelSizeId.HasValue)
-                heelSizeIds.Add(variant.HeelSizeId.Value);
+            if (!sizeIds.Add(variant.SizeId.Value))
+            {
+                throw new ArgumentException(
+                    "Duplicate product size detected.");
+            }
         }
 
-        // One SQL round-trip validates both tables.
-        var validReferences = await _context.Sizes
+        var validCount = await _context.Sizes
             .AsNoTracking()
-            .Where(s =>
-                s.IsActive &&
-                sizeIds.Contains(s.Id))
-            .Select(s => new
-            {
-                Type = 1,
-                Id = s.Id
-            })
-            .Concat(
-                _context.HeelSizes
-                    .AsNoTracking()
-                    .Where(h =>
-                        h.IsActive &&
-                        heelSizeIds.Contains(h.Id))
-                    .Select(h => new
-                    {
-                        Type = 2,
-                        Id = h.Id
-                    }))
-            .ToListAsync(cancellationToken);
+            .CountAsync(
+                s => s.IsActive &&
+                     sizeIds.Contains(s.Id),
+                cancellationToken);
 
-        var validSizeIds = validReferences
-            .Where(x => x.Type == 1)
-            .Select(x => x.Id)
-            .ToHashSet();
-
-        var validHeelSizeIds = validReferences
-            .Where(x => x.Type == 2)
-            .Select(x => x.Id)
-            .ToHashSet();
-
-        if (validSizeIds.Count != sizeIds.Count)
+        if (validCount != sizeIds.Count)
         {
             throw new ArgumentException(
                 "One or more selected sizes do not exist or are inactive.");
         }
+    }
 
-        if (validHeelSizeIds.Count != heelSizeIds.Count)
+    // ============================================================
+    // VALIDATE MODIFIER GROUPS
+    // ============================================================
+    //
+    // Also normalizes the selection rules:
+    // a required group must allow at least one selection.
+    //
+    private async Task ValidateModifierGroups(
+        List<ProductModifierGroupDto>? groups,
+        CancellationToken cancellationToken)
+    {
+        if (groups is null || groups.Count == 0)
+            return;
+
+        var groupIds = new HashSet<int>();
+
+        foreach (var group in groups)
+        {
+            if (group.ModifierGroupId <= 0)
+            {
+                throw new ArgumentException(
+                    "A valid modifier group is required.");
+            }
+
+            if (!groupIds.Add(group.ModifierGroupId))
+            {
+                throw new ArgumentException(
+                    "Duplicate modifier group detected.");
+            }
+
+            if (group.IsRequired && group.MinSelections < 1)
+            {
+                group.MinSelections = 1;
+            }
+
+            if (group.MinSelections < 0 ||
+                group.MaxSelections < 1 ||
+                group.MinSelections > group.MaxSelections)
+            {
+                throw new ArgumentException(
+                    "Invalid min / max selections for a modifier group.");
+            }
+        }
+
+        var validCount = await _context.ModifierGroups
+            .AsNoTracking()
+            .CountAsync(
+                g => g.IsActive &&
+                     groupIds.Contains(g.Id),
+                cancellationToken);
+
+        if (validCount != groupIds.Count)
         {
             throw new ArgumentException(
-                "One or more selected heel sizes do not exist or are inactive.");
+                "One or more selected modifier groups do not exist.");
         }
     }
 
@@ -1614,6 +1766,7 @@ public sealed class ProductService : IProductService
 
         dto.Images ??= [];
         dto.Variants ??= [];
+        dto.ModifierGroups ??= [];
     }
 
     // ============================================================
@@ -1649,17 +1802,17 @@ public sealed class ProductService : IProductService
 
         dto.Images ??= [];
         dto.Variants ??= [];
+        dto.ModifierGroups ??= [];
     }
 
     // ============================================================
     // VARIANT KEY
     // ============================================================
 
-    private static (int? SizeId, int? HeelSizeId) BuildVariantKey(
-        int? sizeId,
-        int? heelSizeId)
+    private static int BuildVariantKey(
+        int? sizeId)
     {
-        return (sizeId, heelSizeId);
+        return sizeId ?? 0;
     }
 
     // ============================================================
@@ -1692,6 +1845,16 @@ public sealed class ProductService : IProductService
                 .ToList()
             ?? [];
 
+        var modifierGroups =
+            product.ProductModifierGroups?
+                .Where(pg =>
+                    pg.ModifierGroup is { IsActive: true } &&
+                    pg.ModifierGroup.Options.Any(o => o.IsActive))
+                .OrderBy(pg => pg.Id)
+                .Select(MapModifierGroup)
+                .ToList()
+            ?? [];
+
         return new ProductResponseDto
         {
             Id =
@@ -1718,21 +1881,16 @@ public sealed class ProductService : IProductService
             StockQuantity =
                 ProductDefaultStock,
 
-            IsInStock =
-                product.IsInStock,
+            IsAvailable =
+                product.IsAvailable,
 
             DiscountPercentage =
                 discount,
 
             DiscountedPrice =
-                discount > 0
-                    ? Math.Round(
-                        product.Price -
-                        (product.Price *
-                         discount / 100m),
-                        2,
-                        MidpointRounding.AwayFromZero)
-                    : product.Price,
+                ApplyDiscount(
+                    product.Price,
+                    discount),
 
             CategoryId =
                 product.CategoryId,
@@ -1755,6 +1913,9 @@ public sealed class ProductService : IProductService
             HasVariants =
                 activeVariants.Count > 0,
 
+            HasModifiers =
+                modifierGroups.Count > 0,
+
             Images =
                 product.Images?
                     .OrderBy(
@@ -1769,6 +1930,9 @@ public sealed class ProductService : IProductService
             Variants =
                 activeVariants
 
+                    .OrderBy(
+                        v => v.Price)
+
                     .Select(
                         v =>
                             new ProductVariantResponseDto
@@ -1779,28 +1943,91 @@ public sealed class ProductService : IProductService
                                 SizeId =
                                     v.SizeId,
 
-                                IsInStock =
-                                    v.InStock,
-
                                 SizeName =
                                     v.Size?.IsActive == true
                                         ? v.Size.Name
                                         : null,
 
-                                HeelSizeId =
-                                    v.HeelSizeId,
+                                Price =
+                                    v.Price,
 
-                                HeelSizeName =
-                                    v.HeelSize?.IsActive == true
-                                        ? v.HeelSize.Name
-                                        : null,
+                                DiscountedPrice =
+                                    ApplyDiscount(
+                                        v.Price,
+                                        discount),
+
+                                IsAvailable =
+                                    v.InStock,
 
                                 StockQuantity =
                                     v.StockQuantity
                             })
 
+                    .ToList(),
+
+            ModifierGroups =
+                modifierGroups
+        };
+    }
+
+    private static ProductModifierGroupResponseDto MapModifierGroup(
+        ProductModifierGroup productGroup)
+    {
+        return new ProductModifierGroupResponseDto
+        {
+            ModifierGroupId =
+                productGroup.ModifierGroupId,
+
+            NameEn =
+                productGroup.ModifierGroup.NameEn,
+
+            NameAr =
+                productGroup.ModifierGroup.NameAr,
+
+            IsRequired =
+                productGroup.IsRequired,
+
+            MinSelections =
+                productGroup.MinSelections,
+
+            MaxSelections =
+                productGroup.MaxSelections,
+
+            Options =
+                productGroup.ModifierGroup.Options
+                    .Where(o => o.IsActive)
+                    .OrderBy(o => o.Id)
+                    .Select(o => new ModifierOptionResponseDto
+                    {
+                        Id = o.Id,
+                        NameEn = o.NameEn,
+                        NameAr = o.NameAr,
+                        Price = o.Price,
+                        IsAvailable = o.IsAvailable,
+                        ExtraProductId = o.ExtraProductId
+                    })
                     .ToList()
         };
+    }
+
+    // ============================================================
+    // DISCOUNT
+    // ============================================================
+    //
+    // Same rounding OrderService uses when charging.
+    //
+    private static decimal ApplyDiscount(
+        decimal price,
+        decimal discountPercentage)
+    {
+        return discountPercentage > 0
+            ? Math.Round(
+                price -
+                (price *
+                 discountPercentage / 100m),
+                2,
+                MidpointRounding.AwayFromZero)
+            : price;
     }
 
     // ============================================================
@@ -1817,14 +2044,6 @@ public sealed class ProductService : IProductService
         // the size itself must still be active.
         if (variant.SizeId.HasValue &&
             variant.Size?.IsActive != true)
-        {
-            return false;
-        }
-
-        // If variant has a heel size,
-        // the heel size itself must still be active.
-        if (variant.HeelSizeId.HasValue &&
-            variant.HeelSize?.IsActive != true)
         {
             return false;
         }

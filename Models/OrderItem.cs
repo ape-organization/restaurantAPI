@@ -19,7 +19,7 @@ namespace PharmacyAPI.Models
 
 
         // =====================================================
-        // PRODUCT VARIANT
+        // PRODUCT VARIANT (SIZE)
         // =====================================================
         //
         // Nullable because a product may have no variants.
@@ -29,11 +29,8 @@ namespace PharmacyAPI.Models
         // Product without sizes:
         //     ProductVariantId = null
         //
-        // Product with size:
+        // Product with size (Small / Medium / Large):
         //     ProductVariantId = 15
-        //
-        // Product with size + heel:
-        //     ProductVariantId = 21
         //
         // =====================================================
 
@@ -52,10 +49,22 @@ namespace PharmacyAPI.Models
         // =====================================================
         // PRICE AT TIME OF ORDER
         // =====================================================
+        //
+        // UnitPrice = size/base price (after discount)
+        //           + selected modifiers
+        //
+        // =====================================================
 
-       
         public decimal UnitPrice { get; set; }
 
         public decimal ActualPrice { get; set; }
+
+
+        // =====================================================
+        // SELECTED MODIFIERS (extras, sauces, ...)
+        // =====================================================
+
+        public ICollection<OrderItemModifier> Modifiers { get; set; }
+            = new List<OrderItemModifier>();
     }
 }

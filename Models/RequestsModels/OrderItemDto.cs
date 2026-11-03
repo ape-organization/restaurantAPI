@@ -8,19 +8,26 @@
 
         public string ProductName { get; set; } = string.Empty;
 
+        public string ProductNameAr { get; set; } = string.Empty;
+
         // First product image only
         public string? ImageUrl { get; set; }
 
 
         // =====================================================
-        // SELECTED VARIANT
+        // SELECTED VARIANT (SIZE)
         // =====================================================
 
         public int? ProductVariantId { get; set; }
 
         public string? SizeName { get; set; }
 
-        public string? HeelSizeName { get; set; }
+
+        // =====================================================
+        // SELECTED MODIFIERS
+        // =====================================================
+
+        public List<OrderItemModifierDto> Modifiers { get; set; } = new();
 
 
         // =====================================================
@@ -29,12 +36,25 @@
 
         public int Quantity { get; set; }
 
+        // Size price + modifiers, per one item
         public decimal UnitPrice { get; set; }
-                
-
 
         public decimal ActualPrice { get; set; }
 
         public decimal TotalPrice { get; set; }
+    }
+
+
+    public class OrderItemModifierDto
+    {
+        public int? ModifierOptionId { get; set; }
+
+        public string NameEn { get; set; } = string.Empty;
+
+        public string NameAr { get; set; } = string.Empty;
+
+        public decimal UnitPrice { get; set; }
+
+        public int Quantity { get; set; }
     }
 }

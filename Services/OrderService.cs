@@ -183,13 +183,37 @@ namespace PharmacyAPI.Services
             // =====================================================
             // MERGE DUPLICATE ITEMS
             // =====================================================
+            //
+            // Lines are merged only when product, size AND the
+            // selected modifiers are identical. A burger with
+            // extra cheese and a plain burger stay separate lines.
+            //
+            // =====================================================
 
             var requestedItems =
                 dto.Items
+                    .Select(x => new RequestedOrderItem
+                    {
+                        ProductId =
+                            x.ProductId,
+
+                        ProductVariantId =
+                            x.ProductVariantId,
+
+                        Quantity =
+                            x.Quantity,
+
+                        Modifiers =
+                            NormalizeModifiers(x.Modifiers),
+
+                        DisplayedUnitPrice =
+                            x.DisplayedUnitPrice
+                    })
                     .GroupBy(x => new
                     {
                         x.ProductId,
-                        x.ProductVariantId
+                        x.ProductVariantId,
+                        ModifiersKey = BuildModifiersKey(x.Modifiers)
                     })
                     .Select(g => new RequestedOrderItem
                     {
@@ -201,7 +225,9 @@ namespace PharmacyAPI.Services
 
                         Quantity =
                             g.Sum(x => x.Quantity),
-                        
+
+                        Modifiers =
+                            g.First().Modifiers,
 
                         DisplayedUnitPrice =
                             g.Select(x => x.DisplayedUnitPrice)
@@ -236,7 +262,8 @@ namespace PharmacyAPI.Services
             // LOAD PRODUCTS
             // =====================================================
             //
-            // Only active variants are loaded.
+            // Only active variants and active modifier options
+            // are loaded.
             //
             // No stock is checked, decreased,
             // or changed here.
@@ -245,13 +272,19 @@ namespace PharmacyAPI.Services
 
             var products =
                 await _context.Products
-                    .AsTracking()
+                    .AsNoTracking()
                     .Where(p =>
                         productIds.Contains(p.Id) &&
                         !p.IsDeleted)
                     .Include(p =>
                         p.Variants
                             .Where(v => v.IsActive))
+                        .ThenInclude(v => v.Size)
+                    .Include(p => p.ProductModifierGroups)
+                        .ThenInclude(pg => pg.ModifierGroup)
+                        .ThenInclude(g => g.Options
+                            .Where(o => o.IsActive))
+                    .AsSplitQuery()
                     .ToDictionaryAsync(
                         p => p.Id,
                         cancellationToken);
@@ -274,6 +307,29 @@ namespace PharmacyAPI.Services
 
 
             // =====================================================
+            // PRICE EVERY ITEM
+            // =====================================================
+            //
+            // IMPORTANT:
+            //
+            // The price is calculated from the database:
+            //
+            // size price (or product price) after discount
+            // + selected modifiers
+            //
+            // It is NOT the price sent by Angular.
+            //
+            // =====================================================
+
+            var pricedItems =
+                requestedItems
+                    .Select(x => PriceItem(
+                        x,
+                        products[x.ProductId]))
+                    .ToList();
+
+
+            // =====================================================
             // CHECK PRICE CHANGES
             // =====================================================
             //
@@ -291,18 +347,10 @@ namespace PharmacyAPI.Services
                 new List<PriceChangeItemDto>();
 
 
-            foreach (var requestedItem in requestedItems)
+            foreach (var pricedItem in pricedItems)
             {
-                var product =
-                    products[requestedItem.ProductId];
-
-
-                var currentPrice =
-                    CalculateSellingPrice(product);
-
-
                 var displayedPrice =
-                    requestedItem.DisplayedUnitPrice;
+                    pricedItem.Request.DisplayedUnitPrice;
 
 
                 // -------------------------------------------------
@@ -322,24 +370,25 @@ namespace PharmacyAPI.Services
                 // Compare prices
                 // -------------------------------------------------
 
-                // The displayed price is compared at 2 decimals,
-                // the same precision used by CalculateSellingPrice.
                 if (Math.Round(
                         displayedPrice.Value,
                         2,
-                        MidpointRounding.AwayFromZero) != currentPrice)
+                        MidpointRounding.AwayFromZero) != pricedItem.UnitPrice)
                 {
                     priceChanges.Add(
                         new PriceChangeItemDto
                         {
                             ProductId =
-                                product.Id,
+                                pricedItem.Product.Id,
+
+                            ProductVariantId =
+                                pricedItem.Variant?.Id,
 
                             OldPrice =
                                 displayedPrice.Value,
 
                             NewPrice =
-                                currentPrice
+                                pricedItem.UnitPrice
                         });
                 }
             }
@@ -450,161 +499,70 @@ namespace PharmacyAPI.Services
 
 
             // =====================================================
-            // PROCESS ORDER ITEMS
+            // CREATE ORDER ITEMS
             // =====================================================
 
-            foreach (var requestedItem in requestedItems)
+            foreach (var pricedItem in pricedItems)
             {
-                var product =
-                    products[requestedItem.ProductId];
-
-
-                ProductVariant? variant = null;
-
-
-                // =================================================
-                // DETERMINE VARIANT STATE
-                // =================================================
-
-                var hasVariants =
-                    product.Variants.Count > 0;
-
-
-                // =================================================
-                // PRODUCT HAS VARIANTS
-                // =================================================
-
-                if (hasVariants)
-                {
-                    // A product with variants MUST receive
-                    // a variant.
-
-                    if (!requestedItem.ProductVariantId.HasValue)
-                    {
-                        throw new InvalidOperationException(
-                            "يجب اختيار المقاس أو الاختيار الخاص بالمنتج.");
-                    }
-
-
-                    // =================================================
-                    // FIND ACTIVE VARIANT
-                    // =================================================
-
-                    variant =
-                        product.Variants.FirstOrDefault(
-                            v =>
-                                v.Id ==
-                                requestedItem.ProductVariantId.Value);
-
-
-                    // =================================================
-                    // VARIANT VALIDATION
-                    // =================================================
-
-                    if (variant == null)
-                    {
-                        throw new InvalidOperationException(
-                            "اختيار المنتج غير صحيح.");
-                    }
-
-
-                    if (!variant.IsActive)
-                    {
-                        throw new InvalidOperationException(
-                            "الاختيار الخاص بالمنتج غير متاح حالياً.");
-                    }
-
-
-                    // =================================================
-                    // IMPORTANT
-                    // =================================================
-                    //
-                    // StockQuantity is intentionally NOT checked,
-                    // decreased, or changed.
-                    //
-                    // =================================================
-                }
-
-
-                // =================================================
-                // PRODUCT WITHOUT VARIANTS
-                // =================================================
-
-                else
-                {
-                    // A product without variants MUST NOT receive
-                    // a variant ID.
-
-                    if (requestedItem.ProductVariantId.HasValue)
-                    {
-                        throw new InvalidOperationException(
-                            "اختيار المنتج غير صحيح.");
-                    }
-
-
-                    // =================================================
-                    // IMPORTANT
-                    // =================================================
-                    //
-                    // StockQuantity is intentionally NOT checked,
-                    // decreased, or changed.
-                    //
-                    // =================================================
-                }
-
-
-                // =================================================
-                // CALCULATE CURRENT SELLING PRICE
-                // =================================================
-                //
-                // IMPORTANT:
-                //
-                // This is the actual price used for the order.
-                //
-                // It is NOT the price sent by Angular.
-                //
-                // =================================================
-
-                var unitPrice =
-                    CalculateSellingPrice(product);
-
-
-                // =================================================
-                // CALCULATE SUBTOTAL
-                // =================================================
-
-                var subtotal =
-                    unitPrice *
-                    requestedItem.Quantity;
+                var quantity =
+                    pricedItem.Request.Quantity;
 
 
                 total +=
-                    subtotal;
+                    pricedItem.UnitPrice *
+                    quantity;
 
 
-                // =================================================
-                // CREATE ORDER ITEM
-                // =================================================
-
-                order.Items.Add(
+                var orderItem =
                     new OrderItem
                     {
                         ProductId =
-                            product.Id,
+                            pricedItem.Product.Id,
 
                         ProductVariantId =
-                            variant?.Id,
+                            pricedItem.Variant?.Id,
 
                         Quantity =
-                            requestedItem.Quantity,
+                            quantity,
 
                         UnitPrice =
-                            unitPrice,
-                       
+                            pricedItem.UnitPrice,
 
                         ActualPrice =
-                            product.ActualPrice
-                    });
+                            pricedItem.Product.ActualPrice
+                    };
+
+
+                // -------------------------------------------------
+                // Snapshot the selected modifiers, so the order
+                // keeps its names and prices even if the menu
+                // changes later.
+                // -------------------------------------------------
+
+                foreach (var (option, modifierQuantity) in pricedItem.Modifiers)
+                {
+                    orderItem.Modifiers.Add(
+                        new OrderItemModifier
+                        {
+                            ModifierOptionId =
+                                option.Id,
+
+                            NameAr =
+                                option.NameAr,
+
+                            NameEn =
+                                option.NameEn,
+
+                            UnitPrice =
+                                option.Price,
+
+                            Quantity =
+                                modifierQuantity
+                        });
+                }
+
+
+                order.Items.Add(orderItem);
             }
 
 
@@ -771,9 +729,22 @@ namespace PharmacyAPI.Services
                     var product = products[item.ProductId];
                     var subtotal = item.UnitPrice * item.Quantity;
 
-                    var variantText = item.ProductVariantId.HasValue
+                    var sizeName = item.ProductVariantId.HasValue
+                        ? product.Variants
+                            .FirstOrDefault(v => v.Id == item.ProductVariantId.Value)?
+                            .Size?.Name
+                        : null;
+
+                    var variantText = sizeName != null
                         ? $@"<div style='font-size:12px;color:#64748b;margin-top:5px;'>
-                        رقم الاختيار: {item.ProductVariantId.Value}
+                        الحجم: {WebUtility.HtmlEncode(sizeName)}
+                     </div>"
+                        : "";
+
+                    var modifiersText = item.Modifiers.Count > 0
+                        ? $@"<div style='font-size:12px;color:#64748b;margin-top:5px;'>
+                        إضافات: {WebUtility.HtmlEncode(string.Join("، ", item.Modifiers.Select(m =>
+                            m.Quantity > 1 ? $"{m.NameAr} ×{m.Quantity}" : m.NameAr)))}
                      </div>"
                         : "";
 
@@ -782,6 +753,7 @@ namespace PharmacyAPI.Services
                     <td style='padding:14px 10px;border-bottom:1px solid #e2e8f0;'>
                         <strong>{WebUtility.HtmlEncode(product.NameAr)}</strong>
                         {variantText}
+                        {modifiersText}
                     </td>
                     <td style='padding:14px 6px;text-align:center;border-bottom:1px solid #e2e8f0;'>
                         {item.Quantity}
@@ -996,21 +968,261 @@ namespace PharmacyAPI.Services
 
 
         // =========================================================
-        // CALCULATE SELLING PRICE
+        // PRICE ONE ITEM
+        // =========================================================
+        //
+        // Validates the selected size and modifiers and returns
+        // the unit price:
+        //
+        // size price (or product price) after discount
+        // + sum(modifier price * modifier quantity)
+        //
         // =========================================================
 
-        private static decimal CalculateSellingPrice(
+        private static PricedOrderItem PriceItem(
+            RequestedOrderItem requestedItem,
             Product product)
         {
-            var price =
-                product.Price;
+            // =================================================
+            // PRODUCT AVAILABILITY
+            // =================================================
+
+            if (!product.IsAvailable)
+            {
+                throw new InvalidOperationException(
+                    $"المنتج {product.NameAr} غير متاح حالياً.");
+            }
 
 
-            if (product.DiscountPercentage > 0)
+            ProductVariant? variant = null;
+
+
+            // =================================================
+            // PRODUCT HAS SIZES
+            // =================================================
+
+            if (product.Variants.Count > 0)
+            {
+                // A product with sizes MUST receive a size.
+
+                if (!requestedItem.ProductVariantId.HasValue)
+                {
+                    throw new InvalidOperationException(
+                        "يجب اختيار الحجم الخاص بالمنتج.");
+                }
+
+
+                variant =
+                    product.Variants.FirstOrDefault(
+                        v =>
+                            v.Id ==
+                            requestedItem.ProductVariantId.Value);
+
+
+                if (variant == null)
+                {
+                    throw new InvalidOperationException(
+                        "اختيار المنتج غير صحيح.");
+                }
+
+
+                if (!variant.IsActive ||
+                    !variant.InStock ||
+                    (variant.Size != null && !variant.Size.IsActive))
+                {
+                    throw new InvalidOperationException(
+                        "الحجم المختار غير متاح حالياً.");
+                }
+            }
+
+
+            // =================================================
+            // PRODUCT WITHOUT SIZES
+            // =================================================
+
+            else if (requestedItem.ProductVariantId.HasValue)
+            {
+                // A product without sizes MUST NOT receive
+                // a variant ID.
+
+                throw new InvalidOperationException(
+                    "اختيار المنتج غير صحيح.");
+            }
+
+
+            // =================================================
+            // BASE PRICE (AFTER DISCOUNT)
+            // =================================================
+
+            var basePrice =
+                ApplyDiscount(
+                    variant?.Price ?? product.Price,
+                    product.DiscountPercentage);
+
+
+            // =================================================
+            // MODIFIERS
+            // =================================================
+
+            var productGroups =
+                product.ProductModifierGroups
+                    .Where(pg => pg.ModifierGroup.IsActive)
+                    .ToList();
+
+
+            var optionsById =
+                productGroups
+                    .SelectMany(pg => pg.ModifierGroup.Options
+                        .Select(o => (Group: pg, Option: o)))
+                    .ToDictionary(x => x.Option.Id);
+
+
+            var selectedModifiers =
+                new List<(ModifierOption Option, int Quantity)>();
+
+
+            var selectedPerGroup =
+                new Dictionary<int, int>();
+
+
+            foreach (var requestedModifier in requestedItem.Modifiers)
+            {
+                if (!optionsById.TryGetValue(
+                        requestedModifier.ModifierOptionId,
+                        out var match))
+                {
+                    throw new InvalidOperationException(
+                        $"إضافة غير صحيحة للمنتج {product.NameAr}.");
+                }
+
+
+                if (!match.Option.IsAvailable)
+                {
+                    throw new InvalidOperationException(
+                        $"الإضافة {match.Option.NameAr} غير متاحة حالياً.");
+                }
+
+
+                selectedModifiers.Add(
+                    (match.Option, requestedModifier.Quantity));
+
+
+                selectedPerGroup[match.Group.ModifierGroupId] =
+                    selectedPerGroup.GetValueOrDefault(
+                        match.Group.ModifierGroupId) +
+                    requestedModifier.Quantity;
+            }
+
+
+            // =================================================
+            // GROUP SELECTION RULES (required / min / max)
+            // =================================================
+
+            foreach (var group in productGroups)
+            {
+                var selected =
+                    selectedPerGroup.GetValueOrDefault(
+                        group.ModifierGroupId);
+
+
+                var min =
+                    group.IsRequired
+                        ? Math.Max(1, group.MinSelections)
+                        : group.MinSelections;
+
+
+                if (selected < min)
+                {
+                    throw new InvalidOperationException(
+                        $"يجب اختيار {group.ModifierGroup.NameAr} للمنتج {product.NameAr}.");
+                }
+
+
+                if (selected > group.MaxSelections)
+                {
+                    throw new InvalidOperationException(
+                        $"الحد الأقصى لاختيار {group.ModifierGroup.NameAr} هو {group.MaxSelections}.");
+                }
+            }
+
+
+            var modifiersPrice =
+                selectedModifiers.Sum(
+                    m => m.Option.Price * m.Quantity);
+
+
+            return new PricedOrderItem(
+                requestedItem,
+                product,
+                variant,
+                selectedModifiers,
+                Math.Round(
+                    basePrice + modifiersPrice,
+                    2,
+                    MidpointRounding.AwayFromZero));
+        }
+
+
+        // =========================================================
+        // MODIFIER HELPERS
+        // =========================================================
+
+        private static List<RequestedModifier> NormalizeModifiers(
+            List<CreateOrderItemModifierDto>? modifiers)
+        {
+            if (modifiers == null || modifiers.Count == 0)
+            {
+                return [];
+            }
+
+
+            if (modifiers.Any(m => m.ModifierOptionId <= 0))
+            {
+                throw new InvalidOperationException(
+                    "إضافة غير صحيحة.");
+            }
+
+
+            if (modifiers.Any(m => m.Quantity <= 0))
+            {
+                throw new InvalidOperationException(
+                    "كمية الإضافة يجب ان تكون اكبر من الصفر.");
+            }
+
+
+            // Same option sent twice -> one entry with summed quantity.
+            return modifiers
+                .GroupBy(m => m.ModifierOptionId)
+                .Select(g => new RequestedModifier(
+                    g.Key,
+                    g.Sum(m => m.Quantity)))
+                .OrderBy(m => m.ModifierOptionId)
+                .ToList();
+        }
+
+
+        private static string BuildModifiersKey(
+            List<RequestedModifier> modifiers)
+        {
+            return string.Join(
+                ",",
+                modifiers.Select(m => $"{m.ModifierOptionId}x{m.Quantity}"));
+        }
+
+
+        // =========================================================
+        // APPLY DISCOUNT
+        // =========================================================
+
+        private static decimal ApplyDiscount(
+            decimal price,
+            decimal discountPercentage)
+        {
+            if (discountPercentage > 0)
             {
                 price -=
                     price *
-                    product.DiscountPercentage /
+                    discountPercentage /
                     100;
             }
 
@@ -1521,6 +1733,9 @@ namespace PharmacyAPI.Services
                             ProductName =
                                 i.Product.NameEn,
 
+                            ProductNameAr =
+                                i.Product.NameAr,
+
                             // =================================================
                             // FIRST PRODUCT IMAGE
                             // =================================================
@@ -1546,11 +1761,31 @@ namespace PharmacyAPI.Services
                                     ? i.ProductVariant.Size.Name
                                     : null,
 
-                            HeelSizeName =
-                                i.ProductVariant != null &&
-                                i.ProductVariant.HeelSize != null
-                                    ? i.ProductVariant.HeelSize.Name
-                                    : null,
+                            // =================================================
+                            // MODIFIERS (snapshot taken at order time)
+                            // =================================================
+
+                            Modifiers =
+                                i.Modifiers
+                                    .OrderBy(m => m.Id)
+                                    .Select(m => new OrderItemModifierDto
+                                    {
+                                        ModifierOptionId =
+                                            m.ModifierOptionId,
+
+                                        NameEn =
+                                            m.NameEn,
+
+                                        NameAr =
+                                            m.NameAr,
+
+                                        UnitPrice =
+                                            m.UnitPrice,
+
+                                        Quantity =
+                                            m.Quantity
+                                    })
+                                    .ToList(),
 
                             // =================================================
                             // QUANTITY
@@ -1590,7 +1825,22 @@ namespace PharmacyAPI.Services
 
             public int Quantity { get; init; }
 
+            public List<RequestedModifier> Modifiers { get; init; } = [];
+
             public decimal? DisplayedUnitPrice { get; set; }
         }
+
+
+        private sealed record RequestedModifier(
+            int ModifierOptionId,
+            int Quantity);
+
+
+        private sealed record PricedOrderItem(
+            RequestedOrderItem Request,
+            Product Product,
+            ProductVariant? Variant,
+            List<(ModifierOption Option, int Quantity)> Modifiers,
+            decimal UnitPrice);
     }
 }

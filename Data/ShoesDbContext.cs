@@ -43,8 +43,6 @@ namespace PharmacyAPI.Data
 
         public DbSet<Size> Sizes { get; set; }
 
-        public DbSet<HeelSize> HeelSizes { get; set; }
-
         // ============================================================
         // ORDERS
         // ============================================================
@@ -64,6 +62,17 @@ namespace PharmacyAPI.Data
         // ============================================================
 
         public DbSet<Slider> Sliders { get; set; }
+
+        // ============================================================
+        // MODIFIERS (extras, sauces, add-ons)
+        // ============================================================
+
+        public DbSet<ModifierGroup> ModifierGroups { get; set; }
+
+        public DbSet<ModifierOption> ModifierOptions { get; set; }
+
+        public DbSet<ProductModifierGroup> ProductModifierGroups { get; set; }
+        public DbSet<OrderItemModifier> OrderItemModifiers { get; set; }
 
         // ============================================================
         // MODEL CONFIGURATION
@@ -108,7 +117,7 @@ namespace PharmacyAPI.Data
                 entity.Property(p => p.StockQuantity)
                     .IsRequired();
 
-                entity.Property(p => p.IsInStock)
+                entity.Property(p => p.IsAvailable)
                     .IsRequired();
 
                 entity.Property(p => p.IsDeleted)
@@ -185,6 +194,12 @@ namespace PharmacyAPI.Data
                 entity.Property(c => c.ImageUrl)
                     .HasMaxLength(1000);
 
+                entity.Property(c => c.DescriptionEn)
+                    .HasMaxLength(2000);
+
+                entity.Property(c => c.DescriptionAr)
+                    .HasMaxLength(2000);
+
                 entity.Property(c => c.IsDeleted)
                     .IsRequired();
 
@@ -257,6 +272,11 @@ namespace PharmacyAPI.Data
                 entity.Property(v => v.IsActive)
                     .IsRequired();
 
+                entity.Property(v => v.Price)
+                    .HasPrecision(18, 2)
+                    .IsRequired();
+
+
                 // ----------------------------------------------------
                 // Product -> Variants
                 // ----------------------------------------------------
@@ -275,14 +295,7 @@ namespace PharmacyAPI.Data
                     .HasForeignKey(v => v.SizeId)
                     .OnDelete(DeleteBehavior.Restrict);
 
-                // ----------------------------------------------------
-                // Variant -> HeelSize
-                // ----------------------------------------------------
-
-                entity.HasOne(v => v.HeelSize)
-                    .WithMany(h => h.ProductVariants)
-                    .HasForeignKey(v => v.HeelSizeId)
-                    .OnDelete(DeleteBehavior.Restrict);
+               
 
                 // ----------------------------------------------------
                 // VARIANT INDEXES
@@ -297,8 +310,8 @@ namespace PharmacyAPI.Data
                 entity.HasIndex(v => new
                 {
                     v.ProductId,
-                    v.SizeId,
-                    v.HeelSizeId
+                    v.SizeId
+                  
                 });
                 entity.HasIndex(v => new
                 {
@@ -308,7 +321,7 @@ namespace PharmacyAPI.Data
 
                 entity.HasIndex(v => v.SizeId);
 
-                entity.HasIndex(v => v.HeelSizeId);
+              
             });
 
             // ========================================================
@@ -328,22 +341,103 @@ namespace PharmacyAPI.Data
     .HasFilter("[IsActive] = 1");
             });
 
+
+
             // ========================================================
-            // HEEL SIZE
+            // MODIFIER GROUP
             // ========================================================
 
-            modelBuilder.Entity<HeelSize>(entity =>
+            modelBuilder.Entity<ModifierGroup>(entity =>
             {
-                entity.HasKey(h => h.Id);
+                entity.HasKey(g => g.Id);
 
-                entity.Property(h => h.Name)
+                entity.Property(g => g.NameAr)
                     .IsRequired()
-                    .HasMaxLength(50);
+                    .HasMaxLength(200);
 
-                entity.HasIndex(h => h.Name)
-      .IsUnique()
-      .HasFilter("[IsActive] = 1");
+                entity.Property(g => g.NameEn)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(g => g.IsActive)
+                    .IsRequired();
             });
+
+            // ========================================================
+            // MODIFIER OPTION
+            // ========================================================
+
+            modelBuilder.Entity<ModifierOption>(entity =>
+            {
+                entity.HasKey(o => o.Id);
+
+                entity.Property(o => o.NameAr)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(o => o.NameEn)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(o => o.Price)
+                    .HasPrecision(18, 2)
+                    .IsRequired();
+
+                entity.Property(o => o.IsAvailable)
+                    .IsRequired();
+
+                entity.Property(o => o.IsActive)
+                    .IsRequired();
+
+                entity.HasOne(o => o.ModifierGroup)
+                    .WithMany(g => g.Options)
+                    .HasForeignKey(o => o.ModifierGroupId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(o => o.ExtraProduct)
+                    .WithMany()
+                    .HasForeignKey(o => o.ExtraProductId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(o => o.ModifierGroupId);
+                entity.HasIndex(o => o.ExtraProductId);
+            });
+
+            // ========================================================
+            // PRODUCT MODIFIER GROUP
+            // ========================================================
+
+            modelBuilder.Entity<ProductModifierGroup>(entity =>
+            {
+                entity.HasKey(pg => pg.Id);
+
+                entity.Property(pg => pg.IsRequired)
+                    .IsRequired();
+
+                entity.Property(pg => pg.MinSelections)
+                    .IsRequired();
+
+                entity.Property(pg => pg.MaxSelections)
+                    .IsRequired();
+
+                entity.HasOne(pg => pg.Product)
+                    .WithMany(p => p.ProductModifierGroups)
+                    .HasForeignKey(pg => pg.ProductId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(pg => pg.ModifierGroup)
+                    .WithMany(g => g.ProductModifierGroups)
+                    .HasForeignKey(pg => pg.ModifierGroupId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(pg => new
+                {
+                    pg.ProductId,
+                    pg.ModifierGroupId
+                }).IsUnique();
+            });
+
+
 
             // ========================================================
             // ORDER
@@ -470,6 +564,49 @@ namespace PharmacyAPI.Data
 
                 entity.HasIndex(i => i.ProductVariantId);
             });
+
+
+
+
+            // ========================================================
+            // ORDER ITEM MODIFIER
+            // ========================================================
+
+            modelBuilder.Entity<OrderItemModifier>(entity =>
+            {
+                entity.HasKey(m => m.Id);
+
+                entity.Property(m => m.NameAr)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(m => m.NameEn)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(m => m.UnitPrice)
+                    .HasPrecision(18, 2)
+                    .IsRequired();
+
+                entity.Property(m => m.Quantity)
+                    .IsRequired();
+
+                // Order item -> selected modifiers
+                entity.HasOne(m => m.OrderItem)
+                    .WithMany(i => i.Modifiers)
+                    .HasForeignKey(m => m.OrderItemId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                // Keep historical record even if the option is removed
+                entity.HasOne(m => m.ModifierOption)
+                    .WithMany()
+                    .HasForeignKey(m => m.ModifierOptionId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(m => m.OrderItemId);
+                entity.HasIndex(m => m.ModifierOptionId);
+            });
+
 
             // ========================================================
             // WEBSITE VISITS

@@ -17,7 +17,7 @@ namespace PharmacyAPI.Models
         // Used when the product has no variants
         public int StockQuantity { get; set; }
 
-        public bool IsInStock { get; set; } = true;
+        public bool IsAvailable { get; set; } = true;
 
         public decimal DiscountPercentage { get; set; } = 0;
 
@@ -63,5 +63,11 @@ namespace PharmacyAPI.Models
         // =========================
 
         public bool IsDeleted { get; set; } = false;
+
+
+
+        public ICollection<ProductModifierGroup> ProductModifierGroups { get; set; }
+            = new List<ProductModifierGroup>();
+
     }
 }

@@ -7,6 +7,9 @@ namespace PharmacyAPI.Models.RequestsModels
         public string NameAr { get; set; } = string.Empty;
         public string NameEn { get; set; } = string.Empty;
 
+        public string? DescriptionAr { get; set; }
+        public string? DescriptionEn { get; set; }
+
         public IFormFile? Image { get; set; }
     }
 }

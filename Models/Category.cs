@@ -9,6 +9,8 @@ namespace PharmacyAPI.Models
         public string NameEn { get; set; } = string.Empty;
 
         public string? ImageUrl { get; set; }
+        public string? DescriptionAr { get; set; }
+        public string? DescriptionEn { get; set; }
 
         public bool IsDeleted { get; set; } = false;
 

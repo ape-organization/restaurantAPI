@@ -1,39 +1,28 @@
-﻿namespace PharmacyAPI.Models
+﻿
+namespace PharmacyAPI.Models
 {
     public class ProductVariant
     {
         public int Id { get; set; }
 
-        // =========================
-        // PRODUCT
-        // =========================
-
+        // Product
         public int ProductId { get; set; }
-
         public Product Product { get; set; } = null!;
 
-        // =========================
-        // SIZE
-        // =========================
-
+        // Size
         public int? SizeId { get; set; }
-
         public Size? Size { get; set; }
 
-        // =========================
-        // HEEL SIZE
-        // =========================
+       
 
-        public int? HeelSizeId { get; set; }
+        // Price for this specific size/variant
+        public decimal Price { get; set; }
 
-        public HeelSize? HeelSize { get; set; }
-
-        // =========================
-        // STOCK
-        // =========================
-
-        public int StockQuantity { get; set; }
+        // Availability
         public bool IsActive { get; set; } = true;
         public bool InStock { get; set; } = true;
+
+        // Optional inventory tracking
+        public int StockQuantity { get; set; }
     }
 }
