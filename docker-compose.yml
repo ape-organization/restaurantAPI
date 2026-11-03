@@ -2,7 +2,7 @@ docker-compose.yml
 version: "3.8"
 
 services:
-  LilyAPI:
+  RestaurantAPI:
     build:
       context: .
       dockerfile: Dockerfile

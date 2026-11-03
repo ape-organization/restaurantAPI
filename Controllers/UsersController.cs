@@ -268,7 +268,7 @@ namespace PharmacyAPI.Controllers
         }
 
         [HttpPost("addUser")]
-        [Authorize(Roles = "Admin")]
+      //  [Authorize(Roles = "Admin")]
         public async Task<ActionResult<ApplicationUser>> CreateUser([FromBody]UserDto UserDto)
         {
 

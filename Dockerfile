@@ -6,15 +6,15 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy csproj and restore for layer caching
-COPY ["LilyAPI.csproj", "./"]
+COPY ["RestaurantAPI.csproj", "./"]
 
-RUN dotnet restore "LilyAPI.csproj"
+RUN dotnet restore "RestaurantAPI.csproj"
 
 # Copy remaining sources
 COPY . .
 
 # Publish
-RUN dotnet publish "LilyAPI.csproj" \
+RUN dotnet publish "RestaurantAPI.csproj" \
     -c Release \
     -o /app/publish \
     /p:UseAppHost=false
@@ -49,4 +49,4 @@ ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 
 # Run application
-ENTRYPOINT ["dotnet", "LilyAPI.dll"]
+ENTRYPOINT ["dotnet", "RestaurantAPI.dll"]

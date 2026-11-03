@@ -1,6 +1,6 @@
 ﻿using PharmacyAPI.Models.RequestsModels;
 
-namespace LilyAPI.Services
+namespace RestaurantAPI.Services
 {
     public class PriceChangedException : Exception
     {

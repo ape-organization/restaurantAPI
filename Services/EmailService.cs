@@ -73,7 +73,7 @@ namespace PharmacyAPI.Services
             {
                 to = new[] { recipient.Address },
                 displayName = string.IsNullOrWhiteSpace(senderName)
-                    ? "Lily Store"
+                    ? "Restaurant"
                     : senderName,
                 subject = subject ?? string.Empty,
                 html = body ?? string.Empty
